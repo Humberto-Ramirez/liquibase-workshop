@@ -1,4 +1,3 @@
-db/
 changelog.xml
 changelog.groovy
 .gradletasknamecache
@@ -10,3 +9,4 @@ starth2
 
 # Ignore Gradle build output directory
 build
+context/

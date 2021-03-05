@@ -4,3 +4,5 @@
  */
 
 rootProject.name = 'liquibase-workshop'
+include 'workshop-database'
+
