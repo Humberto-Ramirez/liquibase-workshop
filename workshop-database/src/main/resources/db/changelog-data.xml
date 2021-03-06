@@ -4,5 +4,31 @@
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.9.xsd">
 
+    <changeSet author="humberto.ramirez" id="version_1.0" context="dev,prod">
+        <tagDatabase tag="version_1.0"/>
+    </changeSet>
+    <changeSet author="humberto.ramirez" id="00" context="dev,prod">
+        <sqlFile encoding="UTF-8"
+                 path="changesets/00-changeset.sql"
+                 relativeToChangelogFile="true"
+                 splitStatements="true"
+                 stripComments="true"/>
+        <rollback>
+            drop table ifwt_kyc_coincidencias
+        </rollback>
+    </changeSet>
+    <changeSet id="01" author="humberto.ramirez" context="dev,prod">
+        <comment>
+            Se agrega columna BlockNotes a tabla Block
+        </comment>
+        <sqlFile path="changesets/01-changeset.sql"
+                 relativeToChangelogFile="true"/>
+        <rollback>
+            alter table Block drop column BlockNotes;
+        </rollback>
+    </changeSet>
+    <changeSet author="humberto.ramirez" id="version_1.1" context="dev,prod">
+        <tagDatabase tag="version_1.1"/>
+    </changeSet>
 
 </databaseChangeLog>
