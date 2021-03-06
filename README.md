@@ -13,7 +13,7 @@ Course materials for the Liquibase Workshop.
     * Use Git:
         * `git clone https://github.com/Humberto-Ramirez/liquibase-workshop`
 	* Download the ZIP:
-	    * [	https://github.com/Humberto-Ramirez/liquibase-workshop/develop](https://github.com/Humberto-Ramirez/liquibase-workshop/zipball/develop)
+	    * [	https://github.com/Humberto-Ramirez/liquibase-workshop/master](https://github.com/Humberto-Ramirez/liquibase-workshop/zipball/master)
 	* Put workshop files in a directory of your choosing.
 
 1. Check Gradle Wrapper
