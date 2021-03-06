@@ -1,57 +1,76 @@
-apply plugin: 'liquibase'
-apply from: 'database.gradle'
+plugins {
+    id 'com.bmuschko.docker-remote-api' version '6.7.0'
+    id 'org.liquibase.gradle' version '2.0.4'
+}
 
-buildscript {
-  repositories {
-		mavenLocal()
-		mavenCentral()
-  }
-  dependencies {
-    classpath 'org.liquibase:liquibase-gradle-plugin:2.0.1'
-  }
+group 'id.crowd'
+version '0.0.1'
+
+ext {
+    dbHost = '127.0.0.1'
+    dbName = 'workshop'
+    dbPort = '3308'
+    dbUsername = 'db-user'
+    dbPassword = 'dbUsrP4ss*'
 }
 
 repositories {
-		mavenLocal()
-		mavenCentral()
+    mavenLocal()
+    jcenter()
+    mavenCentral()
 }
 
 dependencies {
-	liquibaseRuntime 'org.liquibase:liquibase-gradle-plugin:2.0.1'
-  liquibaseRuntime 'org.liquibase:liquibase-groovy-dsl:2.0.2'
-  liquibaseRuntime 'org.liquibase:liquibase-core:3.6.1'
-  liquibaseRuntime 'com.h2database:h2:1.3.160'
-  // liquibaseRuntime 'mysql:mysql-connector-java:5.1.45'
-  liquibaseRuntime 'org.mariadb.jdbc:mariadb-java-client:2.2.5'
+    liquibaseRuntime 'org.liquibase:liquibase-gradle-plugin:2.0.4'
+    liquibaseRuntime 'org.liquibase:liquibase-groovy-dsl:2.1.2'
+    liquibaseRuntime 'org.liquibase:liquibase-core:3.10.3'
+    // mysql connector
+    liquibaseRuntime 'mysql:mysql-connector-java:8.0.16'
+    // implementation group: 'org.yaml', name: 'snakeyaml', version: '1.28'
+    liquibaseRuntime 'org.yaml:snakeyaml:1.28'
+
+    // sqlserver, sybase connector
+    // liquibaseRuntime 'net.sourceforge.jtds:jtds:1.3.1'
 }
 
-def myValue = 'myVariablized value'
 liquibase {
-  mainClassName 'org.liquibase.gradle.OutputEnablingLiquibaseRunner'
-  activities { 
-    main {
-      changeLogFile 'changelog.groovy'
-      url 'jdbc:h2:db/liquibase_workshop;FILE_LOCK=NO'
-      username 'sa'
-      password ''
-			// driver 'com.mysql.jdbc.Driver'
-
-      changeLogParameters([ myToken: myValue,
-	                         second: 'secondValue'])
-      // changeLogParameters([ myToken: 'myParamValue',
-	                        // second: 'secondValue'])
+    def dbHost = (System.getenv('DB_HOST') ?: (project.hasProperty('dbHost') ? dbHost : '')) ?: ''
+    if (!dbHost) {
+        throw new RuntimeException('Se debe espeficar la siguiente variable de ambiente: DB_HOST')
     }
-    second {
-      changeLogFile 'second.groovy'
-      url 'jdbc:h2:db/liquibase_workshop;FILE_LOCK=NO'
-      username 'sa'
-      password ''
-      changeLogParameters([ myToken: 'myvalue',
-	                        second: 'secondValue'])
-    }
-  }
 
-  // runList = project.ext.runList
-  // runList = 'main'
-  runList = 'main, second'
+    def dbName = (System.getenv('DB_NAME') ?: (project.hasProperty('dbName') ? dbName : '')) ?: ''
+    if (!dbName) {
+        throw new RuntimeException('Se debe espeficar la siguiente variable de ambiente: DB_NAME')
+    }
+
+    def dbPort = (System.getenv('DB_PORT') ?: (project.hasProperty('dbPort') ? dbPort : '')) ?: ''
+    if (!dbPort) {
+        throw new RuntimeException('Se debe espeficar la siguiente variable de ambiente: DB_PORT')
+    }
+
+    def userDb = (System.getenv('DB_USERNAME') ?: (project.hasProperty('dbUsername') ? dbUsername : '')) ?: ''
+    if (!userDb) {
+        throw new RuntimeException('Se debe espeficar la siguiente variable de ambiente: DB_USERNAME')
+    }
+
+    def passDb = (System.getenv('DB_PASSWORD') ?: (project.hasProperty('dbPassword') ? dbPassword : '')) ?: ''
+    if (!passDb) {
+        throw new RuntimeException('Se debe espeficar la siguiente variable de ambiente: DB_PASSWORD')
+    }
+
+    println("url conexion -> jdbc:mysql://${dbHost}:${dbPort}/${dbName}?useSSL=false")
+
+    activities {
+        mainClassName 'org.liquibase.gradle.OutputEnablingLiquibaseRunner'
+        // mainClassName 'liquibase.integration.commandline.Main'
+        workshop {
+            driver 'com.mysql.cj.jdbc.Driver'
+            changeLogFile changeLogFileDev
+            url "jdbc:mysql://${dbHost}:${dbPort}/${dbName}?useSSL=false&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true"
+            username userDb
+            password passDb
+        }
+    }
+    runList = project.ext.runList
 }
