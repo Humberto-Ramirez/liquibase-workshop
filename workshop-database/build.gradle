@@ -1,14 +1,12 @@
 apply plugin: 'com.bmuschko.docker-remote-api'
 
-import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+
+import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
-import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerRemoveContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerInspectContainer
-
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+import com.github.dockerjava.api.exception.NotFoundException
+import com.github.dockerjava.api.exception.NotModifiedException
 
 ext {
     groupDocker = 'docker'
@@ -16,14 +14,19 @@ ext {
 
 def PORT_HOST = '3308'
 def MYSQL_DEFAULT_PORT = '3306'
+def NotFoundMessage = "El contenedor '${wsContainerId}' no existe!"
 
 task checkContainer(type: DockerInspectContainer) {
     group groupDocker
-    containerId = wsContainerId
+    containerId.set(wsContainerId)
     onError { exception ->
-        if (exception.message != null && !exception.message.contains('No such container'))
+        if (exception.getClass() == NotFoundException) {
+            logger.quiet NotFoundMessage
+        } else if (exception.message != null) {
+            logger.quiet "El contenedor '${containerId.get()}' no se pudo inspeccionar!"
+            logger.quiet exception.message
             throw exception
-        logger.quiet "No se pudo inspeccionar el contenedor!."
+        }
     }
 }
 
@@ -31,16 +34,20 @@ task checkContainer(type: DockerInspectContainer) {
 task stopContainer(type: DockerStopContainer) {
     group groupDocker
     dependsOn checkContainer
-    containerId = wsContainerId
+    containerId.set(wsContainerId)
     onError { exception ->
-        if (exception.message != null) {
-            if (!exception.message.contains('No such container')) {
-                throw exception
-            } else {
-                logger.quiet "No existe el contenedor con el ID: '${containerId.get()}'."
-            }
+        if (exception.getClass() == NotModifiedException) {
+            logger.quiet "El contenedor '${containerId.get()}' ya está detenido!"
+        } else if (exception.getClass() == NotFoundException) {
+            logger.quiet NotFoundMessage
+        } else if (exception.message != null) {
+            logger.quiet "El contenedor '${containerId.get()}' no se pudo detener!"
+            logger.quiet exception.message
+            throw exception
         }
-        logger.quiet "No se pudo detener el contenedor!."
+    }
+    onComplete {
+        logger.quiet "Se detuvo el contenedor con ID: '${containerId.get()}'."
     }
 }
 
@@ -48,11 +55,18 @@ task removeContainer(type: DockerRemoveContainer) {
     group groupDocker
     dependsOn stopContainer
     removeVolumes = true
-    containerId = wsContainerId
+    containerId.set(wsContainerId)
     onError { exception ->
-        if (exception.message != null && !exception.message.contains('No such container'))
+        if (exception.getClass() == NotFoundException) {
+            logger.quiet NotFoundMessage
+        } else if (exception.message != null) {
+            logger.quiet "El contenedor '${containerId.get()}' no se pudo eliminar!"
+            logger.quiet exception.message
             throw exception
-        logger.quiet "No se pudo eliminar el contenedor!"
+        }
+    }
+    onComplete {
+        logger.quiet "Se eliminó el contenedor con ID: '${containerId.get()}'."
     }
 }
 
@@ -60,40 +74,53 @@ task removeContainer(type: DockerRemoveContainer) {
 task removeImage(type: DockerRemoveImage) {
     group groupDocker
     dependsOn removeContainer
-    imageId = wsImageId
-    force = true
+    imageId.set(wsImageId)
+    force.set(true)
     onError { exception ->
-        if (exception.message != null && !exception.message.contains('No such image'))
+        if (exception.getClass() == NotFoundException) {
+            logger.quiet "La imagen '${wsImageId}' no existe!"
+        } else if (exception.message != null) {
+            logger.quiet "No se pudo eliminar la imagen!"
             throw exception
-        logger.quiet "No se pudo eliminar la imagen!"
+        }
     }
+    onComplete {
+        logger.quiet "Se eliminó la imagen: '${imageId.get()}'."
+    }
+}
+
+task deleteContext(type: Delete) {
+    group groupDocker
+    dependsOn removeImage
+    delete 'context'
 }
 
 task copyProps(type: Copy) {
     group groupDocker
-    dependsOn removeContainer
+    dependsOn deleteContext
     from file('charset.cnf')
     into 'context/'
 }
 
 task createDockerfile(type: Dockerfile) {
     group groupDocker
-    dependsOn copyProps
+    dependsOn deleteContext
     from 'mysql:8.0'
     label(['Author': '\'Humberto-Ramírez\''])
-    copyFile 'charset.cnf', '/etc/mysql/conf.d/charset.cnf'
-    destFile = new File('context/Dockerfile')
+    // para mysql:5.7
+    // copyFile 'charset.cnf', '/etc/mysql/conf.d/charset.cnf'
+    destFile.set(new File('context/Dockerfile'))
 }
 
 task buildImage(type: DockerBuildImage) {
     group groupDocker
-    dependsOn createDockerfile, removeImage
-    inputDir = createDockerfile.destFile.get().asFile.parentFile
+    dependsOn createDockerfile
+    inputDir.set(createDockerfile.destFile.get().asFile.parentFile)
     def finalTag = wsImageId
     remove.set(true)
-    imageId = finalTag
+    imageId.set(finalTag)
     images.add(finalTag)
-    onComplete{
+    onComplete {
         logger.quiet "Se creó la Imagen con tag: '${finalTag}'."
     }
 }
@@ -103,15 +130,22 @@ task createContainer(type: DockerCreateContainer) {
     targetImageId buildImage.getImageId()
     dependsOn buildImage
     hostConfig.memory.set(new Long('3221225472'))
-    hostConfig.portBindings.set(["$PORT_HOST:$MYSQL_DEFAULT_PORT"])
-    hostConfig.autoRemove.set(true)
+    def portsBindings = "$PORT_HOST:$MYSQL_DEFAULT_PORT"
+    hostConfig.portBindings.set([portsBindings])
+    hostConfig.restartPolicy("on-failure", 10)
     containerName.set(wsContainerId)
     envVars.set(['MYSQL_ROOT_PASSWORD': rootPassword, 'MYSQL_DATABASE': nameDatabase, 'MYSQL_USER': userMysql, 'MYSQL_PASSWORD': userMysqlPassword])
     cmd.set(['mysqld'])
+    onComplete {
+        logger.quiet "Se creó el contenedor : '${wsContainerId}'."
+    }
 }
 
 task startContainer(type: DockerStartContainer) {
     group groupDocker
     dependsOn createContainer
     targetContainerId createContainer.getContainerId()
+    onComplete {
+        logger.quiet "Se inició el contenedor : '${wsContainerId}'."
+    }
 }
